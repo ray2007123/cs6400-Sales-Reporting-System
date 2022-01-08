@@ -1,0 +1,554 @@
+Team017:
+TeamMember1 Mingming Wang    Email: mwang611@gatech.edu
+TeamMember2 Shuang Tao    Email: stao45@gatech.edu
+TeamMember3 Xiaoyue Wang  Email: xwang3068@gatech.edu
+TeamMember4 Jinyu Du      Email: jdu303@gatech.edu
+
+
+/*SQL for "addHoliday" */
+SELECT * FROM holiday WHERE DATE(date_time) = '$hDate';
+UPDATE holiday SET name = '$hName' WHERE DATE(date_time) = '$hDate';
+INSERT INTO holiday(name, date_time) VALUES ('$hName', '$hDate');
+
+/*SQL for "editHoliday" */
+SELECT * FROM holiday;
+
+/*SQL for "count products" */
+SELECT COUNT(pid) AS p FROM product;
+
+
+/*SQL for count stores*/
+SELECT COUNT(store_id) AS number FROM store;
+
+
+/*SQL for "editCityPop" */
+SELECT * FROM city;
+SELECT DISTINCT city_name FROM city;
+SELECT DISTINCT state_name FROM city;
+
+UPDATE
+    City
+SET
+    population = '$populationNumber'
+WHERE
+    state_name = '$stateName' AND city_name = '$cityName'
+LIMIT 1;
+
+
+/*SQL for "count products" */
+SELECT COUNT(pid) AS p FROM product;
+
+
+/* SQL for count stores*/
+SELECT COUNT(store_id) AS number FROM store;
+
+/* SQL for editCityPopulation*/
+UPDATE City
+SET population = '$populationNumber'
+WHERE state_name = '$stateName' AND city_name = '$cityName'
+LIMIT 1;
+
+/* SQL for count stores offer childcare*/
+SELECT
+    COUNT(store_id) AS NUMBER
+FROM
+    childcare
+WHERE
+    time_limit > 0;
+
+
+/*SQL for Report 1 – Category Report*/
+#Category Report
+SELECT phc.category_name AS category_name, 
+COUNT(p.pid) AS product_count, 
+MIN(p.retail_price) AS min_price,
+AVG(p.retail_price) AS avg_price,
+MAX(p.retail_price) AS max_price
+FROM Product AS p
+INNER JOIN ProductHasCategory AS phc ON phc.pid = p.pid GROUP BY category_name
+ORDER BY category_name ASC;
+
+
+/*SQL for Report 2 – Actual versus Predicted Revenue for Couches and Sofas*/
+SELECT
+       set1.pid,
+       set1.name,
+       set1.retailprice,
+       set1.totalsold,
+       set2.discountsold,
+       set1.totalsold-set2.discountsold as retailprice_sold,
+       set1.totalsold * set1.retailprice AS actual_revenue,
+       set1.totalsold * set1.retailprice * 0.75 AS pre_revenue,
+       set3.difference
+       FROM (
+           SELECT transaction.pid AS pid,
+           product.product_name AS name,
+           SUM(transaction.sold_quantity) AS totalsold,
+           product.retail_price AS retailprice
+           FROM transaction
+               JOIN producthascategory AS pc ON transaction.pid = pc.pid
+               JOIN product ON transaction.pid = product.pid
+           WHERE pc.category_name = 'Couches and Sofas'
+           GROUP BY transaction.pid) AS set1
+       JOIN(
+           SELECT transaction.pid AS pid,
+           SUM(transaction.sold_quantity) AS discountsold
+
+           FROM transaction
+               JOIN producthascategory AS pc ON transaction.pid = pc.pid
+               JOIN discountprice ON transaction.pid = discountprice.pid AND transaction.date_time = discountprice.date_time
+           WHERE pc.category_name = 'Couches and Sofas'
+           GROUP BY transaction.pid) AS set2
+       ON set1.pid = set2.pid
+       JOIN(
+           SELECT
+               x.pid AS pid,
+               x.ar - x.pr AS difference
+           FROM (
+               SELECT transaction.pid AS pid,
+               SUM(
+                   product.retail_price * transaction.sold_quantity * 0.75
+               ) AS pr,
+               SUM(
+                   transaction.sold_quantity * discountprice.discount_price
+               ) AS ar
+
+               FROM transaction
+               JOIN product ON transaction.pid = product.pid
+               JOIN producthascategory AS pc
+               ON transaction.pid = pc.pid
+               JOIN discountprice ON transaction.pid = discountprice.pid AND transaction.date_time = discountprice.date_time
+               WHERE pc.category_name = 'Couches and Sofas'
+               GROUP BY transaction.pid) AS x
+               HAVING difference > 5000 OR Difference <-5000) AS set3 ON set1.pid = set3.pid
+       ORDER BY difference DESC;
+
+
+/* SQL for Report 3 – Store Revenue by Year by State*/
+-- DROP TABLE IF EXISTS RevenuebyYearbyState;
+
+SELECT state_name AS StateName FROM City;
+
+CREATE VIEW RevenuebyYearbyState AS SELECT
+St.store_id AS store_id,
+St.street_address AS store_address,
+St.city_name AS city_name,
+DP.date_time AS date_time,
+T.sold_quantity,
+DP.discount_price,
+P.retail_price*(1 - DP. discount_price) * T.sold_quantity AS total
+FROM Store AS St
+INNER JOIN Transaction AS T ON St.store_id = T.store_id
+INNER JOIN DiscountPrice AS DP ON DP.pid = T.pid AND DP.date_time = T.date_time JOIN Product AS P ON P.pid= T.pid
+WHERE St.state_name = 'State';
+
+-- display by year
+SELECT
+              store.store_id,
+              store.street_address,
+              store.city_name,
+              year(transaction.date_time) AS year,
+              SUM(transaction.sold_quantity * IFNULL(discountprice.discount_price, product.retail_price) ) AS revenue
+            FROM`store` JOIN transaction ON store.store_id=transaction.store_id
+            LEFT JOIN discountprice ON transaction.date_time=discountprice.date_time AND transaction.pid=discountprice.pid
+            LEFT JOIN product ON transaction.pid=product.pid
+            WHERE store.state_name='$selectedState'
+            GROUP BY year(transaction.date_time),store.store_id
+            ORDER BY year(transaction.date_time) ASC;
+
+
+-- display by TotalRevenue
+SELECT
+              store.store_id,
+              store.street_address,
+              store.city_name,
+              year(transaction.date_time) AS year,
+              SUM(transaction.sold_quantity * IFNULL(discountprice.discount_price, product.retail_price) ) AS revenue
+            FROM store JOIN transaction ON store.store_id=transaction.store_id
+            LEFT JOIN discountprice ON transaction.date_time=discountprice.date_time AND transaction.pid=discountprice.pid
+            LEFT JOIN product ON transaction.pid=product.pid
+            WHERE store.state_name='$selectedState'
+            GROUP BY year(transaction.date_time),store.store_id
+            ORDER BY revenue DESC;
+	    
+	    
+/*SQL for Report 4 –Outdoor Furniture on Groundhog Day?*/
+SELECT
+    X.year,
+    X.total_sold,
+    X.ave_sold,
+    Y.groundhogsold
+FROM
+    (
+    SELECT
+        YEAR(TRANSACTION.date_time) AS YEAR,
+        SUM(TRANSACTION.sold_quantity) AS total_sold,
+        SUM(TRANSACTION.sold_quantity) / 365 AS ave_sold
+    FROM
+        product
+    JOIN producthascategory ON product.pid = producthascategory.pid
+    JOIN TRANSACTION ON product.pid = TRANSACTION.pid
+WHERE
+    producthascategory.category_name = 'Outdoor Furniture'
+GROUP BY
+    YEAR
+) AS X
+LEFT JOIN(
+    SELECT
+        YEAR(date_time) AS YEAR,
+        SUM(sold_quantity) AS groundhogsold
+    FROM TRANSACTION
+JOIN producthascategory ON TRANSACTION
+    .pid = producthascategory.pid
+WHERE
+    MONTH(date_time) = 02 AND DAY(date_time) = 02 AND producthascategory.category_name = 'Outdoor Furniture'
+GROUP BY
+    YEAR(date_time)
+) AS Y
+ON
+    X.year = Y.year
+ORDER BY
+    `x`.`year` ASC;
+
+
+/*SQL Report 5 –State with Highest Volume for each Category*/
+CREATE VIEW JoinedTable AS
+SELECT
+    producthascategory.category_name AS category_name,
+    transaction.pid AS pid,
+    store.state_name AS state_name,
+    transaction.sold_quantity AS sold_quantity,
+    transaction.date_time AS date
+FROM transaction
+INNER JOIN producthascategory ON transaction.pid = producthascategory.pid
+INNER JOIN store ON Store.store_id = transaction.store_id;
+
+
+
+CREATE VIEW filterByYearAndMonth AS
+SELECT
+    category_name,
+    state_name,
+    SUM(sold_quantity) AS sum_quantity
+FROM JoinedTable
+WHERE YEAR(date) = '$userInputYear' AND MONTH(date)='$userInputMonth'
+GROUP BY category_name, state_name;
+
+
+
+SELECT
+    filter.category_name AS category_name,
+    filter.state_name AS state_name,
+    filter.sum_quantity AS max_quantity
+FROM filterByYearAndMonth AS filter
+WHERE (category_name, sum_quantity) IN ( 
+    SELECT category_name, MAX(sum_quantity)
+    FROM filterByYearAndMonth
+    GROUP BY category_name
+      )ORDER BY category_name ASC;
+      
+      
+SELECT
+    Y.category_name,
+    Y.max_quantity,
+    z.state_name
+FROM
+    (
+    SELECT
+        X.category_name AS category_name,
+        MAX(X.sumsold) AS max_quantity
+    FROM
+        (
+        SELECT
+            producthascategory.category_name AS category_name,
+            store.state_name,
+            SUM(TRANSACTION.sold_quantity) AS sumsold
+        FROM
+            producthascategory
+        JOIN TRANSACTION ON producthascategory.pid = TRANSACTION.pid
+    JOIN store ON TRANSACTION
+        .store_id = store.store_id
+    WHERE
+        MONTH(TRANSACTION.date_time) = '$hMonth' AND YEAR(TRANSACTION.date_time) = '$hYear'
+    GROUP BY
+        producthascategory.category_name,
+        store.state_name
+    ) AS X
+GROUP BY
+    X.category_name
+) AS Y
+JOIN(
+    SELECT
+        producthascategory.category_name AS category_name,
+        store.state_name,
+        SUM(TRANSACTION.sold_quantity) AS sumsold
+    FROM
+        producthascategory
+    JOIN TRANSACTION ON producthascategory.pid = TRANSACTION.pid
+JOIN store ON TRANSACTION
+    .store_id = store.store_id
+WHERE
+    MONTH(TRANSACTION.date_time) = '$hMonth' AND YEAR(TRANSACTION.date_time) = '$hYear'
+GROUP BY
+    producthascategory.category_name,
+    store.state_name
+) AS z
+ON
+    Y.category_name = z.category_name AND Y.max_quantity = z.sumsold
+ORDER BY
+    Y.category_name ASC;
+
+
+/*SQL for Report 6 –Revenue by Population*/
+DROP VIEW IF EXISTS
+    PopulationCategory;
+CREATE VIEW PopulationCategory AS SELECT
+    city_name,
+    state_name,
+    CASE 
+    WHEN population < 3700000 THEN 'Small' 
+    WHEN population >= 3700000 AND population < 6700000 THEN 'Medium' 
+    WHEN population >= 6700000 AND population < 9000000 THEN 'Large' 
+    ELSE 'Extra Large'
+END AS 'Population_Category'
+FROM
+    City;
+    
+   
+   
+   
+-- ByPopulation     
+SELECT 
+            x.Population_Category,
+            SUM(CASE WHEN y.year=2000 THEN y.quantity * y.price ELSE 0 END) AS '2000',
+            SUM(CASE WHEN y.year=2001 THEN y.quantity * y.price ELSE 0 END) AS '2001',
+            SUM(CASE WHEN y.year=2002 THEN y.quantity * y.price ELSE 0 END) AS '2002',
+            SUM(CASE WHEN y.year=2003 THEN y.quantity * y.price ELSE 0 END) AS '2003',
+            SUM(CASE WHEN y.year=2004 THEN y.quantity * y.price ELSE 0 END) AS '2004',
+            SUM(CASE WHEN y.year=2005 THEN y.quantity * y.price ELSE 0 END) AS '2005',
+            SUM(CASE WHEN y.year=2006 THEN y.quantity * y.price ELSE 0 END) AS '2006',
+            SUM(CASE WHEN y.year=2007 THEN y.quantity * y.price ELSE 0 END) AS '2007',
+            SUM(CASE WHEN y.year=2008 THEN y.quantity * y.price ELSE 0 END) AS '2008',
+            SUM(CASE WHEN y.year=2009 THEN y.quantity * y.price ELSE 0 END) AS '2009',
+            SUM(CASE WHEN y.year=2010 THEN y.quantity * y.price ELSE 0 END) AS '2010',
+            SUM(CASE WHEN y.year=2011 THEN y.quantity * y.price ELSE 0 END) AS '2011',
+            SUM(CASE WHEN y.year=2012 THEN y.quantity * y.price ELSE 0 END) AS '2012'
+            FROM
+            (SELECT store.store_id, populationcategory.Population_Category FROM store 
+            JOIN populationcategory ON store.city_name = populationcategory.city_name AND 
+            store.state_name = populationcategory.state_name) AS x
+            JOIN 
+            (SELECT transaction.store_id,transaction.pid,year(transaction.date_time)AS year,
+            transaction.sold_quantity AS quantity, IFNULL(DiscountPrice.discount_price, product.retail_price) AS price
+            FROM transaction LEFT JOIN DiscountPrice
+            ON transaction.pid=DiscountPrice.pid AND transaction.date_time=DiscountPrice.date_time
+            LEFT JOIN product ON transaction.pid = product.pid) AS y 
+            ON x.store_id = y.store_id
+            GROUP BY x.Population_Category
+            ORDER BY find_in_set(x.Population_Category,'Small,Medium,Large,Extra Large');
+ 
+ 
+ 
+            
+-- ByYear           
+SELECT y.year,
+    SUM(CASE WHEN x.Population_Category= 'Small' THEN y.quantity * y.price ELSE 0 END) AS 'Small',
+    SUM(CASE WHEN x.Population_Category= 'Medium' THEN y.quantity * y.price ELSE 0 END) AS 'Medium',
+    SUM(CASE WHEN x.Population_Category= 'Large' THEN y.quantity * y.price ELSE 0 END) AS 'Large',
+    SUM(CASE WHEN x.Population_Category= 'Extra Large' THEN y.quantity * y.price ELSE 0 END) AS 'Extra Large'
+FROM
+    (SELECT store.store_id, 
+    populationcategory.Population_Category 
+        FROM store JOIN populationcategory 
+            ON store.city_name = populationcategory.city_name AND store.state_name = populationcategory.state_name
+    ) AS x 
+    JOIN
+    (SELECT transaction.store_id, 
+            transaction.pid, 
+            year(transaction.date_time) AS year, 
+            transaction.sold_quantity AS quantity, 
+            IFNULL(DiscountPrice.discount_price, product.retail_price) AS price
+        FROM transaction LEFT JOIN DiscountPrice
+            ON transaction.pid=DiscountPrice.pid AND transaction.date_time=DiscountPrice.date_time
+        LEFT JOIN product 
+            ON transaction.pid = product.pid
+    ) AS y 
+    ON x.store_id = y.store_id
+GROUP BY y.year
+ORDER BY y.year ASC;
+
+
+
+-- ByPopulation  
+SELECT
+                          x.Population_Category,
+                          SUM(CASE WHEN y.year=2000 THEN y.quantity * y.price ELSE 0 END) AS '2000',
+                          SUM(CASE WHEN y.year=2001 THEN y.quantity * y.price ELSE 0 END) AS '2001',
+                          SUM(CASE WHEN y.year=2002 THEN y.quantity * y.price ELSE 0 END) AS '2002',
+                          SUM(CASE WHEN y.year=2003 THEN y.quantity * y.price ELSE 0 END) AS '2003',
+                          SUM(CASE WHEN y.year=2004 THEN y.quantity * y.price ELSE 0 END) AS '2004',
+                          SUM(CASE WHEN y.year=2005 THEN y.quantity * y.price ELSE 0 END) AS '2005',
+                          SUM(CASE WHEN y.year=2006 THEN y.quantity * y.price ELSE 0 END) AS '2006',
+                          SUM(CASE WHEN y.year=2007 THEN y.quantity * y.price ELSE 0 END) AS '2007',
+                          SUM(CASE WHEN y.year=2008 THEN y.quantity * y.price ELSE 0 END) AS '2008',
+                          SUM(CASE WHEN y.year=2009 THEN y.quantity * y.price ELSE 0 END) AS '2009',
+                          SUM(CASE WHEN y.year=2010 THEN y.quantity * y.price ELSE 0 END) AS '2010',
+                          SUM(CASE WHEN y.year=2011 THEN y.quantity * y.price ELSE 0 END) AS '2011',
+                          SUM(CASE WHEN y.year=2012 THEN y.quantity * y.price ELSE 0 END) AS '2012'
+                          FROM
+                          (SELECT
+                            store.store_id,
+                            z.Population_Category
+                            FROM store
+                          JOIN (SELECT
+                          city_name,
+                          state_name,
+                          CASE
+                          WHEN population < 3700000 THEN 'Small'
+                          WHEN population >= 3700000 AND population < 6700000 THEN 'Medium'
+                          WHEN population >= 6700000 AND population < 9000000 THEN 'Large'
+                          ELSE 'Extra Large'
+                          END AS 'Population_Category'
+                          FROM
+                          City) as z ON store.city_name = z.city_name AND
+                          store.state_name = z.state_name) AS x
+                          JOIN
+                          (SELECT
+                            transaction.store_id,
+                            transaction.pid,
+                            year(transaction.date_time)AS year,
+                            transaction.sold_quantity AS quantity,
+                            IFNULL(discountprice.discount_price, product.retail_price) AS price
+                          FROM transaction LEFT JOIN DiscountPrice
+                          ON transaction.pid=discountprice.pid AND transaction.date_time=discountprice.date_time
+                          LEFT JOIN product ON transaction.pid = product.pid) AS y
+                          ON x.store_id = y.store_id
+                          GROUP BY x.Population_Category
+                          ORDER BY find_in_set(x.Population_Category,'Small,Medium,Large,Extra Large');
+
+
+-- ByYear  
+SELECT y.year,
+                            SUM(CASE WHEN x.Population_Category= 'Small' THEN y.quantity * y.price ELSE 0 END) AS 'Small',
+                            SUM(CASE WHEN x.Population_Category= 'Medium' THEN y.quantity * y.price ELSE 0 END) AS 'Medium',
+                            SUM(CASE WHEN x.Population_Category= 'Large' THEN y.quantity * y.price ELSE 0 END) AS 'Large',
+                            SUM(CASE WHEN x.Population_Category= 'Extra Large' THEN y.quantity * y.price ELSE 0 END) AS 'Extra Large'
+                        FROM
+                            (SELECT store.store_id,
+                            z.Population_Category
+                                FROM store JOIN (SELECT city_name, state_name, CASE WHEN population < 3700000 THEN 'Small' WHEN population >= 3700000 AND population < 6700000 THEN 'Medium' WHEN population >= 6700000 AND population < 9000000 THEN 'Large' ELSE 'Extra Large' END AS 'Population_Category' FROM City) AS z
+                                    ON store.city_name = z.city_name AND store.state_name = z.state_name
+                            ) AS x
+                            JOIN
+                            (SELECT transaction.store_id,
+                                    transaction.pid,
+                                    year(transaction.date_time) AS year,
+                                    transaction.sold_quantity AS quantity,
+                                    IFNULL(DiscountPrice.discount_price, product.retail_price) AS price
+                                FROM transaction LEFT JOIN DiscountPrice
+                                    ON transaction.pid=DiscountPrice.pid AND transaction.date_time=DiscountPrice.date_time
+                                LEFT JOIN product
+                                    ON transaction.pid = product.pid
+                            ) AS y
+                            ON x.store_id = y.store_id
+                        GROUP BY y.year
+                        ORDER BY y.year ASC;
+
+
+/*SQL for Report 7 – Childcare Sales Volume*/
+CREATE VIEW temp AS
+SELECT YEAR(transaction.date_time) AS year, MONTH(transaction.date_time) AS month, transaction.store_id, SUM(transaction.sold_quantity * p.retail_price) AS volumn, childcare.time_limit AS time_limit
+FROM transaction
+LEFT OUTER JOIN childcare ON childcare.store_id = transaction.store_id
+JOIN product AS p ON p.pid = transaction.pid
+GROUP BY YEAR(transaction.date_time), MONTH(transaction.date_time), transaction.store_id, time_limit
+ORDER BY YEAR(transaction.date_time) DESC, MONTH(transaction.date_time) DESC;
+
+SELECT year, month, 
+	CAST(SUM(CASE WHEN time_limit <= 30 THEN volumn ELSE 0 END) AS decimal(38, 2)) AS 'Max 30 Mins',
+	CAST(SUM(CASE WHEN time_limit > 30 AND time_limit <= 45 THEN volumn ELSE 0 END) AS decimal(38, 2)) AS 'Max 45 Mins',
+	CAST(SUM(CASE WHEN time_limit > 45 AND time_limit <= 60 THEN volumn ELSE 0 END) AS decimal(38, 2)) AS 'Max 60 Mins',
+    CAST(SUM(CASE WHEN time_limit is NULL THEN volumn ELSE 0 END) AS decimal(38, 2)) AS 'No Childcare'
+FROM temp
+GROUP BY year, month
+ORDER BY year DESC, month DESC
+LIMIT 12;
+
+
+/* SQL for Report 8 – Restaurant Impact on Category Sales*/
+SELECT
+    ProductHasCategory.category_name AS Category,
+    Store.restaurant AS Store_Type,
+    SUM(TRANSACTION.sold_quantity) AS Q_Sold
+FROM TRANSACTION
+INNER JOIN Store ON TRANSACTION
+    .store_id = Store.store_id
+INNER JOIN ProductHasCategory ON TRANSACTION
+    .pid = ProductHasCategory.pid
+GROUP BY
+    Category,
+    Store_Type
+ORDER BY
+    Category ASC;
+
+
+/*SQL for Report 9 – -Advertising Campaign Analysis*/
+-- Sales(Transaction) With Discount Price During Ad Campaign
+CREATE VIEW SalesDuringCampaign AS
+(
+SELECT DISTINCT discount_sales_date, temp.pid, p.product_name, sold_quantity, discount_price
+FROM
+(
+	SELECT d.date_time AS discount_sales_date, s.pid, s.sold_quantity, d.discount_price
+	FROM discountprice d JOIN transaction s
+	ON d.pid = s.pid AND d.date_time = s.date_time
+) 
+temp
+JOIN campaign ac ON ac.date_time = temp.discount_sales_date
+JOIN product p ON p.pid = temp.pid
+);
+
+-- All Sales(Transaction) With Discount Price
+CREATE VIEW AllDiscountSales AS
+(
+SELECT d.date_time AS discount_sales_date, s.pid, p.product_name, sold_quantity, d.discount_price
+FROM discountprice d 
+JOIN transaction s ON d.pid = s.pid AND d.date_time = s.date_time
+JOIN product p ON p.pid = s.pid
+);
+
+-- Sales(Transaction) With Discount Price Outside Ad Campaign
+CREATE VIEW SalesOutsideCampaign AS
+(
+SELECT AllDiscountSales.* FROM AllDiscountSales
+LEFT JOIN SalesDuringCampaign ON 
+    AllDiscountSales.discount_sales_date=SalesDuringCampaign.discount_sales_date
+    AND AllDiscountSales.pid=SalesDuringCampaign.pid
+WHERE SalesDuringCampaign.discount_sales_date IS NULL
+);
+
+
+-- Final Output
+CREATE VIEW CampaignAnalysis AS
+(
+SELECT temp_out_ads.pid AS ProductID, temp_out_ads.product_name AS ProductName, SoldDuringCampaign, SoldOutsideCampaign, SoldDuringCampaign - SoldOutsideCampaign AS Difference
+FROM
+(SELECT pid, product_name, SUM(sold_quantity) AS SoldOutsideCampaign
+FROM SalesOutsideCampaign 
+GROUP BY pid, product_name
+) temp_out_ads
+JOIN
+(
+SELECT pid, product_name, SUM(sold_quantity) AS SoldDuringCampaign
+FROM SalesDuringCampaign 
+GROUP BY pid, product_name
+) temp_during_ads
+ON temp_during_ads.pid = temp_out_ads.pid
+)
+;
+
+-- Only the top 10, followed by the bottom 10 from these results should be in the final report output
+SELECT * FROM (SELECT * FROM CampaignAnalysis ORDER BY Difference DESC LIMIT 10) top10
+UNION
+SELECT * FROM (SELECT * FROM CampaignAnalysis ORDER BY Difference ASC LIMIT 10) bottom10
+ORDER BY Difference DESC
